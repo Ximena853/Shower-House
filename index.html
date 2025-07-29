@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Regalos para Shower House</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilo personalizado para la fuente Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Un color de fondo suave */
+        }
+        .gift-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden; /* Para asegurar que el checkmark no se desborde */
+        }
+        .gift-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        .gift-card.selected {
+            border-color: #3b82f6; /* Borde azul para seleccionado */
+            background-color: #eff6ff; /* Fondo azul claro para seleccionado */
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+        }
+        .gift-card.selected .checkmark {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .checkmark {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 1.5rem;
+            color: #3b82f6;
+            opacity: 0;
+            transform: scale(0);
+            transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+        }
+        /* Estilos para el modal */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+        .modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container mx-auto p-6 bg-white rounded-xl shadow-lg my-8">
+        <h1 class="text-4xl font-extrabold text-center text-gray-800 mb-4">
+            ¡Bienvenido al Juego de Regalos para Shower House!
+        </h1>
+        <p class="text-lg text-center text-gray-600 mb-8">
+            Selecciona los regalos que te gustaría entregar. ¡Diviértete!
+        </p>
+        <p id="user-id-display" class="text-sm text-gray-500 text-center mb-4">
+            Tu ID de Invitado: Cargando...
+        </p>
+
+        <div id="gift-options" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Las tarjetas de regalos se insertarán aquí por JavaScript -->
+        </div>
+
+        <div class="text-center space-x-4">
+            <button id="confirm-selection-btn"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full shadow-lg
+                           transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Confirmar Selección
+            </button>
+            <button id="view-all-selections-btn"
+                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-full shadow-lg
+                           transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
+                Ver Selecciones de Invitados
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal para mostrar la selección del invitado actual -->
+    <div id="selection-modal" class="fixed inset-0 flex items-center justify-center hidden modal-overlay">
+        <div class="bg-white p-8 rounded-xl shadow-2xl modal-content transform scale-95 transition-transform duration-300 ease-out">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Tus Regalos Seleccionados</h2>
+            <ul id="selected-gifts-list" class="list-disc list-inside text-gray-700 text-lg space-y-2 mb-6">
+                <!-- Los regalos seleccionados se insertarán aquí -->
+            </ul>
+            <div class="text-right">
+                <button id="close-modal-btn"
+                        class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-full shadow
+                               transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para mostrar todas las selecciones de los invitados -->
+    <div id="all-selections-modal" class="fixed inset-0 flex items-center justify-center hidden modal-overlay">
+        <div class="bg-white p-8 rounded-xl shadow-2xl modal-content transform scale-95 transition-transform duration-300 ease-out">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Todas las Selecciones de Invitados</h2>
+            <div id="all-guests-selections-list" class="space-y-6">
+                <!-- Todas las selecciones de los invitados se insertarán aquí -->
+                <p class="text-gray-500 text-center">Cargando selecciones...</p>
+            </div>
+            <div class="text-right mt-6">
+                <button id="close-all-selections-modal-btn"
+                        class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-full shadow
+                               transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Importar las funciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variables globales de Firebase
+        let app;
+        let db;
+        let auth;
+        let userId = 'cargando...'; // Valor inicial mientras se autentica
+
+        // Obtener variables de entorno de Canvas
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // FIX: Corregido el error de referencia de `initialAuthToken` antes de la inicialización
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+
+        // Array de objetos de regalos con un ID único y nombre
+        const gifts = [
+            { id: 'microfiber-towels', name: 'Set de paños de microfibra' },
+            { id: 'laundry-basket', name: 'Cesto de ropa sucia' },
+            { id: 'dinnerware', name: 'Vajilla' },
+            { id: 'full-cutlery', name: 'Cubiertos completos' },
+            { id: 'grey-towels', name: 'Toallas grandes y de manos color gris' },
+            { id: 'wall-clock', name: 'Reloj de pared' },
+            { id: 'duvet-cover', name: 'Cubrecama caliente y liviano para cama semidoble (gris)' },
+            { id: 'duvet-cover-single', name: 'Cubrecama caliente y liviano para cama sencilla (gris)' }, // Nueva opción
+            { id: 'non-stick-pots', name: 'Batería de Ollas antiadherentes' },
+            { id: 'grain-organizers', name: 'Organizadores de granos' },
+            { id: 'bathroom-bin', name: 'Caneca para baño' },
+            { id: 'stone-bath-mat', name: 'Tapete de piedra para baño' },
+            { id: 'double-bed-sheets', name: 'Juego de sábanas para cama semidoble' },
+            { id: 'single-bed-sheets', name: 'Juego de sábanas para cama sencilla' },
+            { id: 'double-mattress-protector', name: 'Protector de colchón para cama semidoble' },
+            { id: 'drawer-organizers', name: 'Organizadores para cajones' }
+        ];
+
+        // Conjunto para almacenar los IDs de los regalos seleccionados por el usuario actual
+        const selectedGiftIds = new Set();
+
+        // Referencias a elementos del DOM
+        const giftOptionsContainer = document.getElementById('gift-options');
+        const confirmSelectionBtn = document.getElementById('confirm-selection-btn');
+        const viewAllSelectionsBtn = document.getElementById('view-all-selections-btn');
+        const selectionModal = document.getElementById('selection-modal');
+        const selectedGiftsList = document.getElementById('selected-gifts-list');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const allSelectionsModal = document.getElementById('all-selections-modal');
+        const allGuestsSelectionsList = document.getElementById('all-guests-selections-list');
+        const closeAllSelectionsModalBtn = document.getElementById('close-all-selections-modal-btn');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        /**
+         * Inicializa Firebase y autentica al usuario.
+         */
+        async function initializeFirebaseAndAuth() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Escuchar cambios en el estado de autenticación
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = `Tu ID de Invitado: ${userId}`;
+                        console.log('Usuario autenticado:', userId);
+                        // Cargar las selecciones guardadas del usuario si existen
+                        await loadUserSelections();
+                        renderGiftCards(); // Renderizar tarjetas después de cargar selecciones
+                    } else {
+                        // Si no hay usuario autenticado, intentar iniciar sesión anónimamente
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        }
+                        catch (error) {
+                            console.error("Error al autenticar:", error);
+                            userIdDisplay.textContent = "Error al cargar ID.";
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                userIdDisplay.textContent = "Error al inicializar Firebase.";
+            }
+        }
+
+        /**
+         * Carga las selecciones guardadas del usuario actual desde Firestore.
+         */
+        async function loadUserSelections() {
+            if (!db || !userId) {
+                console.warn("Firestore o userId no están listos para cargar selecciones.");
+                return;
+            }
+            try {
+                const docRef = doc(db, `artifacts/${appId}/public/data/guestSelections`, userId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data && data.selectedGifts) {
+                        selectedGiftIds.clear(); // Limpiar selecciones actuales
+                        data.selectedGifts.forEach(giftName => {
+                            const gift = gifts.find(g => g.name === giftName);
+                            if (gift) {
+                                selectedGiftIds.add(gift.id);
+                            }
+                        });
+                        console.log('Selecciones cargadas para el usuario:', userId, selectedGiftIds);
+                    }
+                } else {
+                    console.log("No hay selecciones guardadas para este usuario.");
+                }
+            } catch (error) {
+                console.error("Error al cargar selecciones del usuario:", error);
+            }
+        }
+
+        /**
+         * Renderiza las tarjetas de regalos en el contenedor.
+         */
+        function renderGiftCards() {
+            giftOptionsContainer.innerHTML = ''; // Limpiar el contenedor antes de renderizar
+            gifts.forEach(gift => {
+                const isSelected = selectedGiftIds.has(gift.id);
+                const cardHtml = `
+                    <div id="gift-${gift.id}"
+                         class="gift-card bg-white p-6 rounded-xl shadow-md border-2 border-gray-200
+                                flex flex-col items-center justify-center text-center
+                                ${isSelected ? 'selected' : ''}"
+                         data-gift-id="${gift.id}"
+                         data-gift-name="${gift.name}">
+                        <p class="text-xl font-semibold text-gray-700 mt-2">${gift.name}</p>
+                        <span class="checkmark">&#10003;</span> <!-- Unicode checkmark -->
+                    </div>
+                `;
+                giftOptionsContainer.innerHTML += cardHtml;
+            });
+
+            // Añadir event listeners a las nuevas tarjetas
+            document.querySelectorAll('.gift-card').forEach(card => {
+                card.addEventListener('click', toggleGiftSelection);
+            });
+        }
+
+        /**
+         * Alterna la selección de un regalo cuando se hace clic en su tarjeta.
+         * @param {Event} event - El evento de clic.
+         */
+        function toggleGiftSelection(event) {
+            const card = event.currentTarget;
+            const giftId = card.dataset.giftId;
+
+            if (selectedGiftIds.has(giftId)) {
+                selectedGiftIds.delete(giftId);
+                card.classList.remove('selected');
+            } else {
+                selectedGiftIds.add(giftId);
+                card.classList.add('selected');
+            }
+        }
+
+        /**
+         * Guarda la selección actual del usuario en Firestore.
+         */
+        async function saveUserSelection() {
+            if (!db || !userId) {
+                console.error("Firestore o userId no están listos para guardar la selección.");
+                return;
+            }
+            try {
+                const selectedGiftNames = Array.from(selectedGiftIds).map(id => {
+                    const gift = gifts.find(g => g.id === id);
+                    return gift ? gift.name : null;
+                }).filter(name => name !== null);
+
+                // Guardar la selección en un documento con el ID del usuario
+                const docRef = doc(db, `artifacts/${appId}/public/data/guestSelections`, userId);
+                await setDoc(docRef, {
+                    userId: userId,
+                    selectedGifts: selectedGiftNames,
+                    timestamp: new Date()
+                }, { merge: true }); // Usar merge para no sobrescribir otros campos si los hubiera
+                console.log("Selección guardada exitosamente para el usuario:", userId);
+            } catch (error) {
+                console.error("Error al guardar la selección:", error);
+            }
+        }
+
+        /**
+         * Muestra el modal con la lista de regalos seleccionados por el invitado actual.
+         */
+        function showSelectionModal() {
+            selectedGiftsList.innerHTML = ''; // Limpiar la lista antes de añadir elementos
+
+            if (selectedGiftIds.size === 0) {
+                selectedGiftsList.innerHTML = '<li class="text-gray-500">No has seleccionado ningún regalo.</li>';
+            } else {
+                selectedGiftIds.forEach(giftId => {
+                    const gift = gifts.find(g => g.id === giftId);
+                    if (gift) {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = gift.name;
+                        selectedGiftsList.appendChild(listItem);
+                    }
+                });
+            }
+            selectionModal.classList.remove('hidden'); // Mostrar el modal
+            saveUserSelection(); // Guardar la selección al confirmar
+        }
+
+        /**
+         * Oculta el modal de selección del invitado actual.
+         */
+        function hideSelectionModal() {
+            selectionModal.classList.add('hidden'); // Ocultar el modal
+        }
+
+        /**
+         * Muestra el modal con todas las selecciones de los invitados.
+         */
+        function showAllSelectionsModal() {
+            allSelectionsModal.classList.remove('hidden'); // Mostrar el modal
+            loadAllGuestSelections(); // Cargar y mostrar todas las selecciones
+        }
+
+        /**
+         * Oculta el modal de todas las selecciones de los invitados.
+         */
+        function hideAllSelectionsModal() {
+            allSelectionsModal.classList.add('hidden'); // Ocultar el modal
+        }
+
+        /**
+         * Carga y muestra todas las selecciones de los invitados desde Firestore en tiempo real.
+         */
+        function loadAllGuestSelections() {
+            if (!db) {
+                console.error("Firestore no está inicializado.");
+                allGuestsSelectionsList.innerHTML = '<p class="text-red-500">Error: Firestore no está inicializado.</p>';
+                return;
+            }
+
+            const guestSelectionsColRef = collection(db, `artifacts/${appId}/public/data/guestSelections`);
+            // Usar onSnapshot para escuchar cambios en tiempo real
+            onSnapshot(guestSelectionsColRef, (snapshot) => {
+                allGuestsSelectionsList.innerHTML = ''; // Limpiar la lista
+                if (snapshot.empty) {
+                    allGuestsSelectionsList.innerHTML = '<p class="text-gray-500 text-center">Aún no hay selecciones de invitados.</p>';
+                    return;
+                }
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const guestId = data.userId || 'Desconocido';
+                    const selectedGifts = data.selectedGifts || [];
+                    const timestamp = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : 'N/A';
+
+                    const guestEntry = document.createElement('div');
+                    guestEntry.className = 'bg-gray-50 p-4 rounded-lg shadow-sm mb-4';
+                    guestEntry.innerHTML = `
+                        <p class="font-bold text-gray-800">Invitado ID: <span class="text-blue-600 break-words">${guestId}</span></p>
+                        <p class="text-sm text-gray-500 mb-2">Fecha/Hora: ${timestamp}</p>
+                        <ul class="list-disc list-inside text-gray-700 ml-4">
+                            ${selectedGifts.length > 0 ? selectedGifts.map(gift => `<li>${gift}</li>`).join('') : '<li class="text-gray-500">No seleccionó regalos.</li>'}
+                        </ul>
+                    `;
+                    allGuestsSelectionsList.appendChild(guestEntry);
+                });
+            }, (error) => {
+                console.error("Error al obtener las selecciones de los invitados:", error);
+                allGuestsSelectionsList.innerHTML = '<p class="text-red-500">Error al cargar las selecciones.</p>';
+            });
+        }
+
+        // Event listeners
+        confirmSelectionBtn.addEventListener('click', showSelectionModal);
+        closeModalBtn.addEventListener('click', hideSelectionModal);
+        viewAllSelectionsBtn.addEventListener('click', showAllSelectionsModal);
+        closeAllSelectionsModalBtn.addEventListener('click', hideAllSelectionsModal);
+
+        // Inicializar Firebase y autenticación al cargar la página
+        document.addEventListener('DOMContentLoaded', initializeFirebaseAndAuth);
+    </script>
+</body>
+</html>
