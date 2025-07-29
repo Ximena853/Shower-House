@@ -132,8 +132,8 @@
 
         // Obtener variables de entorno de Canvas
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // FIX: Corregido el error de referencia de `initialAuthToken` antes de la inicialización
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // FIX: Corregido el error de referencia de `initialAuthToken` antes de la inicialización
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 
